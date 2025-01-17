@@ -1,8 +1,10 @@
 import numpy as np
+from . import operators as op
 
 
 def dos(model,E_fineness=1000,sigma2 = 0.0001):
 
+    print("dos calculation start")
     model.E = np.linspace(np.min(model.enes)-0.1,np.max(model.enes)+0.1,E_fineness)
     model.dos = np.array([])
 
@@ -12,6 +14,8 @@ def dos(model,E_fineness=1000,sigma2 = 0.0001):
     del e
 
     model.dos /= np.sum(model.dos)*(model.E[1]-model.E[0])
+
+    print("dos calculation finished")
 
     return
 
@@ -93,71 +97,96 @@ def kF_index(model):
     return
 
 
-def spin_conductivity(model,mu,nu,gamma=0.0001):
-    """直流スピン伝導度の計算
+def spin_conductivity(model,mu,nu,omega=0,gamma=0.0001):
+    """スピン伝導度の計算
 
     Args:
-        mu (str, optional): スピンの流れる方向. Defaults to "x".
+        mu (str, optional): スピン流れの流れる方向. Defaults to "x".
         nu (str, optional): 電場を加える方向. Defaults to "y".
         gamma (float, optional): ダンピングファクター. Defaults to 0.0001.
 
     Returns:
         complex: 複素伝導度が帰ってくる
+
+    Remark:
+        カレントに自己無撞着に決めるパラメータがあるときには気を付けること
     """
-    if(model.enes[0,0,0] == 0):
-        print("NSCF calculation wasn't done yet.")
-        return
-
-    # フェルミ面の計算をしていなかったらする
-    if(model.kF_index.size == 3):
-        kF_index(model)
-
     print("SpinConductivity calculation start.")
 
     # スピン伝導度 複素数として初期化
     chi = 0.0 + 0.0*1j
+    chis = np.zeros((model.k_mesh, model.k_mesh), np.complex128)
 
     # ブリュアンゾーンのメッシュの生成
     kx,ky = model._gen_kmesh()
 
-    # バンド間遷移
     for i in range(model.k_mesh):
         for j in range(model.k_mesh):
 
-            Jmu_matrix = np.conjugate(model.eigenStates[i,j].T) @ model.SpinCurrent(kx[i,j],ky[i,j],mu) @ model.eigenStates[i,j]
-            Jnu_matrix = np.conjugate(model.eigenStates[i,j].T) @     model.Current(kx[i,j],ky[i,j],nu) @ model.eigenStates[i,j]
+            chi_ij = 0.0 + 0.0*1j
+            Jmu_matrix = np.conjugate(model.eigenStates[i,j].T) @ op.SpinCurrent(kx[i,j],ky[i,j],mu) @ model.eigenStates[i,j]
+            Jnu_matrix = np.conjugate(model.eigenStates[i,j].T) @ op.Current(kx[i,j],ky[i,j],nu) @ model.eigenStates[i,j]
 
             for m in range(model.n_orbit*2):
                 for n in range(model.n_orbit*2):
 
                     Jmu = Jmu_matrix[m,n]
-                    Jnu  = Jnu_matrix[n,m]
+                    Jnu = Jnu_matrix[n,m]
 
-                    if(np.abs(model.enes[i,j,m]-model.enes[i,j,n]) > 1e-6):
-                        # フェルミ分布
-                        efm = 1 if (model.enes[i,j][m]<model.ef) else 0
-                        efn = 1 if (model.enes[i,j][n]<model.ef) else 0
+                    # バンド間遷移 (van Vleck 項)
+                    if(np.abs(model.enes[i,j][m]-model.enes[i,j][n])>1e-6):
 
-                        add_chi = Jmu * Jnu * (efm - efn) / ((model.enes[i,j][m]-model.enes[i,j][n])*(model.enes[i,j][m]-model.enes[i,j][n]+1j*gamma))
+                        efm = fermi_dist(model.enes[i,j][m],model.ef, 1000)
+                        efn = fermi_dist(model.enes[i,j][n],model.ef, 1000)
+
+                        add_chi = Jmu * Jnu * (efm - efn) / (
+                            (model.enes[i,j][m]-model.enes[i,j][n])*(model.enes[i,j][m]-model.enes[i,j][n] + omega + 1j*gamma))
+                        chi_ij += add_chi
                         chi += add_chi
-    del i,j,m,n
 
-    # バンド内遷移
-    for i,j,m in model.kF_index:
+                    # バンド内遷移
+                    else:
+                        # フェルミ分布の微分
+                        f_diff = (fermi_dist_diff(model.enes[i,j][m],model.ef)
+                                  +fermi_dist_diff(model.enes[i,j][n],model.ef))/2
 
-            Jmu_matrix = np.conjugate(model.eigenStates[i,j].T) @ model.SpinCurrent(kx[i,j],ky[i,j],mu) @ model.eigenStates[i,j]
-            Jnu_matrix = np.conjugate(model.eigenStates[i,j].T) @     model.Current(kx[i,j],ky[i,j],nu) @ model.eigenStates[i,j]
+                        add_chi = Jmu * Jnu * f_diff / (omega + 1j*gamma)
+                        chi_ij += add_chi
+                        chi += add_chi
 
-            Jmu = Jmu_matrix[m,m]
-            Jnu = Jnu_matrix[m,m]
-
-            chi += 1j * Jmu * Jnu / gamma
-
-    # del i,j,m
+            chis[i,j] = chi_ij
 
     chi /= (model.k_mesh*model.k_mesh*1j)
+    chis /= (model.k_mesh*model.k_mesh*1j)
+
+    munu = mu + nu
+    if (munu == "xx"):
+        model.chi_xx = chis
+    elif (munu == "yy"):
+        model.chi_yy = chis
+    elif (munu == "xy"):
+        model.chi_xy = chis
+    elif (munu == "yx"):
+        model.chi_yx = chis
 
     print("Spin Conductivity calculation finished")
     print("ReChi = {:1.2e}, ImChi = {:1.2e}\n".format(np.real(chi),np.imag(chi)))
 
     return chi
+
+def fermi_dist(ene,ef: float,beta: float=1000):
+    # ene が数字でも配列でも numpy 配列に変換
+    a = np.array(beta*(ene-ef))
+    # オーバーフローを防ぐ
+    a = np.clip(a, -700, 700)
+
+    return 1/(np.exp(a)+1)
+
+
+def fermi_dist_diff(ene,ef: float,beta: float=1000):
+    # ene が数字でも配列でも numpy 配列に変換
+    a = np.array(beta*(ene-ef))
+    # オーバーフローを防ぐ
+    a = np.clip(a, -700, 700)
+
+    return -beta/(2*np.cosh(a/2))**2

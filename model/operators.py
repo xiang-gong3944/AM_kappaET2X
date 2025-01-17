@@ -69,7 +69,7 @@ def Current(kx, ky, mu):
     Args:
         kx (float): 波数のx成分
         ky (float): 波数のy成分
-        mu (sring): 電流の方向. "x", "y", "z" のみ受け付ける
+        mu (str): 電流の方向. "x", "y", "z" のみ受け付ける
 
     Return:
         J (ndarray): 8x8の電流演算子行列
@@ -129,7 +129,7 @@ def SpinCurrent(kx, ky, mu):
     Args:
         kx (float): 波数のx成分
         ky (float): 波数のy成分
-        mu (sring): 電流の方向. "x", "y", "z" のみ受け付ける
+        mu (str): 電流の方向. "x", "y", "z" のみ受け付ける
 
     Return:
         J (ndarray): 8x8の電流演算子行列
