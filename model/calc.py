@@ -139,7 +139,7 @@ def electrical_current_matrix(model,mu: str):
     return electrical_current
 
 
-def spin_conductivity(model,mu,nu,omega=0,gamma=0.0001):
+def spin_conductivity(model,mu,nu,omega=0,gamma=0.001):
     """スピン伝導度の計算
 
     Args:
@@ -180,7 +180,7 @@ def spin_conductivity(model,mu,nu,omega=0,gamma=0.0001):
                         efn = fermi_dist(model.enes[i,j][n],model.ef, 1000)
 
                         add_chi = Jmu * Jnu * (efm - efn) / (
-                            (model.enes[i,j][m]-model.enes[i,j][n])*(model.enes[i,j][m]-model.enes[i,j][n] + omega + 1j*gamma))
+                            (model.enes[i,j][m]-model.enes[i,j][n])*(model.enes[i,j][m]-model.enes[i,j][n] + omega))
                         chi_ij += add_chi
 
                     # バンド内遷移
@@ -235,7 +235,7 @@ def spin_cond_omega(model, mu: str, nu: str, omegas):
     return chis
 
 
-def electrical_conductivity(model,mu,nu,omega=0,gamma=0.0001):
+def electrical_conductivity(model,mu,nu,omega=0,gamma=0.001):
     """電気伝導度の計算
 
     Args:
@@ -276,7 +276,7 @@ def electrical_conductivity(model,mu,nu,omega=0,gamma=0.0001):
                         efn = fermi_dist(model.enes[i,j][n],model.ef, 1000)
 
                         add_sigma = Jmu * Jnu * (efm - efn) / (
-                            (model.enes[i,j][m]-model.enes[i,j][n])*(model.enes[i,j][m]-model.enes[i,j][n] + omega + 1j*gamma))
+                            (model.enes[i,j][m]-model.enes[i,j][n])*(model.enes[i,j][m]-model.enes[i,j][n] + omega))
                         sigma_ij += add_sigma
 
                     # バンド内遷移

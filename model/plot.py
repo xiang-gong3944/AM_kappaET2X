@@ -235,7 +235,7 @@ def dos(model, **kwargs):
     return
 
 
-def fermi_surface(model, beta=1000, **kwargs):
+def fermi_surface(model, beta=500, **kwargs):
     option = {**defaults, **kwargs}
 
     # プロットエリアの整備
@@ -258,21 +258,19 @@ def fermi_surface(model, beta=1000, **kwargs):
 
     # スピン分裂の表示
     kx, ky = model._gen_kmesh()
-    spin = np.sum(model.spins * calc.fermi_dist(model.enes, model.ef, beta), axis=2)
-    spin_max = np.max(np.abs(spin))
-    spin_min = -spin_max
-    mappable = ax.pcolormesh(kx, ky, spin, cmap="seismic", vmax=spin_max, vmin = spin_min)
-    # plt.colorbar(mappable, ax=ax)
+    spin = np.sum(model.spins * calc.fermi_dist(model.enes, model.ef, beta), axis=2).clip(-0.5,0.5)
+    mappable = ax.pcolormesh(kx, ky, spin, cmap="seismic", vmax=0.5, vmin = -0.5)
+    plt.colorbar(mappable, ax=ax)
 
     # フェルミ面の表示 スピン分裂がないところだけ散布図でプロットすることであたかも重なって紫になってるように見える。
-    abs_spin_spit = 1 - (np.abs(spin) - np.min(np.abs(spin)))/(np.max(np.abs(spin)) - np.min(np.abs(spin)))
+    abs_spin_spit = 1 - np.abs(spin)*2
     fermi_surf = np.sum(-calc.fermi_dist_diff(model.enes, model.ef, beta),  axis=2)
-    fermi_surf = (fermi_surf - np.min(fermi_surf))/(np.max(fermi_surf) - np.min(fermi_surf))
+    fermi_surf = fermi_surf / np.max(fermi_surf)
     fermi_surf = fermi_surf * abs_spin_spit
     ax.scatter(kx, ky, c="tab:purple", alpha=fermi_surf, s=0.1)
 
-    plt.title("$E_f$ = {:1.1f}".format(model.ef))
-    plt.axis("square")
+    plt.title("$N$ = {:1.1f}".format(model.n_carrier))
+    ax.set_box_aspect(1)
 
     if not os.path.isdir(option["folder_path"]):
         os.makedirs(option["folder_path"])
@@ -292,7 +290,7 @@ def fermi_surface(model, beta=1000, **kwargs):
     return
 
 
-def spin_current(model, mu, **kwargs):
+def spin_current(model, mu, beta=500, **kwargs):
     option = {**defaults, **kwargs}
 
     fig, ax = plt.subplots()
@@ -313,24 +311,23 @@ def spin_current(model, mu, **kwargs):
 
     for i in range(model.k_mesh):
         for j in range(model.k_mesh):
-            velocity[i,j] = np.sum(np.diag(J_matrices[i,j]) * calc.fermi_dist(model.enes[i,j], model.ef, 200))
+            velocity[i,j] = np.sum(np.diag(J_matrices[i,j]) * calc.fermi_dist(model.enes[i,j], model.ef, beta))
 
     real_v = velocity.real
     velocity_max = np.max(np.abs(real_v))
     velocity_min = -velocity_max
 
-
     kx, ky = model._gen_kmesh()
     mappable = ax.pcolormesh(kx, ky, real_v, cmap="seismic", vmax=velocity_max, vmin=velocity_min)
     plt.colorbar(mappable, ax=ax)
 
-    plt.title("$J_{{ {:s} }}^s,\,E_f =$ {:1.1f} ".format(mu, model.ef))
+    plt.title("$J_{{ {:s} }}^s,\,N =$ {:1.1f} ".format(mu, model.n_carrier))
     ax.axis("equal")
 
     if not os.path.isdir(option["folder_path"]):
         os.makedirs(option["folder_path"])
 
-    image_path = option["folder_path"] +"spin_J"+ model.file_index
+    image_path = option["folder_path"] + "spin_J" + mu + model.file_index
     plt.savefig(image_path, bbox_inches='tight')
 
     if(option["is_post"]):
@@ -340,24 +337,13 @@ def spin_current(model, mu, **kwargs):
         plt.show()
     else:
         plt.close()
-        print("generated fermi surface\n")
+        print("generated spin current on fermi surface\n")
 
     return
 
 
-def electrical_current(model, mu, **kwargs):
+def electrical_current(model, mu, beta=500, **kwargs):
     option = {**defaults, **kwargs}
-
-    velocity = np.zeros((model.k_mesh, model.k_mesh), np.complex128)
-    J_matrices = calc.electrical_current_matrix(model, mu)
-
-    for i in range(model.k_mesh):
-        for j in range(model.k_mesh):
-            velocity[i,j] = np.sum(np.diag(J_matrices[i,j]) * calc.fermi_dist(model.enes[i,j], model.ef, 200))
-
-    real_v = velocity.real
-    velocity_max = np.max(np.abs(real_v))
-    velocity_min = -velocity_max
 
     fig, ax = plt.subplots()
     ax.yaxis.set_ticks_position('both')
@@ -372,17 +358,28 @@ def electrical_current(model, mu, **kwargs):
     plt.xlabel("$k_x$")
     plt.ylabel("$k_y$")
 
+    velocity = np.zeros((model.k_mesh, model.k_mesh), np.complex128)
+    J_matrices = calc.electrical_current_matrix(model, mu)
+
+    for i in range(model.k_mesh):
+        for j in range(model.k_mesh):
+            velocity[i,j] = np.sum(np.diag(J_matrices[i,j]) * calc.fermi_dist(model.enes[i,j], model.ef, beta))
+
+    real_v = velocity.real
+    velocity_max = np.max(np.abs(real_v))
+    velocity_min = -velocity_max
+
     kx, ky = model._gen_kmesh()
     mappable = ax.pcolormesh(kx, ky, real_v, cmap="seismic", vmax=velocity_max, vmin=velocity_min)
     plt.colorbar(mappable, ax=ax)
 
-    plt.title("$J_{{ {:s} }}^e,\,E_f =$ {:1.1f} ".format(mu, model.ef))
+    plt.title("$J_{{ {:s} }}^e,\,N =$ {:1.1f} ".format(mu, model.n_carrier))
     ax.axis("equal")
 
     if not os.path.isdir(option["folder_path"]):
         os.makedirs(option["folder_path"])
 
-    image_path = option["folder_path"] +"electrical_J"+ model.file_index
+    image_path = option["folder_path"] + "electrical_J" + mu + model.file_index
     plt.savefig(image_path, bbox_inches='tight')
 
     if(option["is_post"]):
@@ -392,7 +389,7 @@ def electrical_current(model, mu, **kwargs):
         plt.show()
     else:
         plt.close()
-        print("generated fermi surface\n")
+        print("generated electrical current on fermi surface\n")
 
     return
 
@@ -443,9 +440,9 @@ def spin_conductivity(model, mu: str, nu: str, **kwargs):
     mappable = ax.pcolormesh(kx, ky, chi, cmap="seismic", vmax = chi_max, vmin=chi_min)
     plt.colorbar(mappable, ax=ax)
 
-    plt.title("$\chi_{{ {:s} }} =$ {:1.2f}, $E_f =$ {:1.1f} ".format(munu, np.sum(chi), model.ef))
+    plt.title("$\chi_{{ {:s} }} =$ {:1.2f}, $N =$ {:1.1f} ".format(munu, np.sum(chi), model.n_carrier))
 
-    plt.axis("square")
+    ax.set_box_aspect(1)
 
 
     if not os.path.isdir(option["folder_path"]):
@@ -510,9 +507,9 @@ def electrical_conductivity(model, mu: str, nu: str, **kwargs):
     mappable = ax.pcolormesh(kx, ky, sigma, cmap="seismic", vmax = sigma_max, vmin=sigma_min)
     plt.colorbar(mappable, ax=ax)
 
-    plt.title("$\sigma_{{ {:s} }} =$ {:1.2f}, $E_f =$ {:1.1f} ".format(munu, np.sum(sigma), model.ef))
+    plt.title("$\sigma_{{ {:s} }} =$ {:1.2f}, $N =$ {:1.1f} ".format(munu, np.sum(sigma), model.n_carrier))
 
-    plt.axis("square")
+    ax.set_box_aspect(1)
 
     if not os.path.isdir(option["folder_path"]):
         os.makedirs(option["folder_path"])

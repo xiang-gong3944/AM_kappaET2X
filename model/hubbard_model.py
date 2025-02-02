@@ -66,7 +66,7 @@ def _spin(enes, eigenstate):
     ]
 
     # エネルギー縮退している状態のスピンをゼロに設定
-    ENERGY_DEGENERACY_THRESHOLD = 1e-12
+    ENERGY_DEGENERACY_THRESHOLD = 1e-3
     for orbital in range(n_orbit):
         if np.abs(enes[2*orbital] - enes[2*orbital + 1]) < ENERGY_DEGENERACY_THRESHOLD:
             spin_differences[2*orbital] = 0
@@ -75,7 +75,7 @@ def _spin(enes, eigenstate):
     return np.array(spin_differences)
 
 class HubbardModel:
-    def __init__(self,n_carrier=2.0,k_mesh=31,U=8,iteration=400,err=1e-6,fineness=5):
+    def __init__(self,n_carrier=2.0,k_mesh=31,U=1,iteration=400,err=1e-6,fineness=5):
         """モデルのパラメータの設定
 
         Args:
@@ -116,6 +116,11 @@ class HubbardModel:
         self.chi_yy = None
         self.chi_xy = None
         self.chi_yx = None
+
+        self.sigma_xx = None
+        self.sigma_yy = None
+        self.sigma_xy = None
+        self.sigma_yx = None
 
         self.kF_index = np.array([[-1,-1,-1]])
 
@@ -233,7 +238,7 @@ class HubbardModel:
         return
 
 
-    def _calc_nscf(self,fineness=5):
+    def _calc_nscf(self,fineness=1):
         """
         delta と ef が与えられたときの各k点の固有状態のエネルギー、状態ベクトル、スピンの大きさの計算をする
 
@@ -243,8 +248,8 @@ class HubbardModel:
 
         print("NSCF calculation start.")
 
-        if(self.enes == 0):
-            self.k_mesh *= fineness
+        # if(self.enes == 0):
+        self.k_mesh *= fineness
         self.enes = np.zeros((self.k_mesh,self.k_mesh,self.n_orbit*2))
         self.eigenStates = np.zeros((self.k_mesh,self.k_mesh,self.n_orbit*2,self.n_orbit*2),dtype=np.complex128)
         self.spins = np.zeros((self.k_mesh,self.k_mesh,self.n_orbit*2))
